@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# added by Deepthi
+SL_R/log
+
 # Distribution / packaging
 .Python
 data/
