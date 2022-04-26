@@ -9,6 +9,8 @@ library(logr)
 library(lubridate) #for date parsing
 library(dplyr)
 library(ggplot2)  #visualization
+library(reshape2) #pivot tble
+library(stringr)
 #NLP packages
 library(tm)  #Text mining package
 #library(SnowballC) #collapsing word to common root-Stemming
@@ -76,7 +78,9 @@ ggplot(data_grp_day, aes(newDate, cnt)) +
   ggtitle("Daily Comcast complaint frequency")
 
 ### Observations ###
-log_print("By looking at the daily and monthly plots, we can conclude that most number of complaints are added in June 2015.")
+data_grp_mth<-arrange(data_grp_mth,desc(cnt))
+max_month <- format(data_grp_mth$month[1],"%B-%Y")
+log_print(paste("By looking at the daily and monthly plots, we can conclude that most number of complaints are added in ",max_month,".",sep = ""),hide_notes = TRUE)
 ### Observations ###
   
 ### Q.Provide a table with the frequency of complaint types.
@@ -104,12 +108,14 @@ mat_sort <- sort(rowSums(mat),decreasing=TRUE)
 ComplTypeCnt_mat <- data.frame(word = names(mat_sort),cnt=mat_sort) #created a dataframe with two columns - word and cnt
 write.csv(ComplTypeCnt_mat,'./log/OutputFiles/ComplaintTypes_Freq.csv',row.names = F)
 #Most used words
-head(ComplTypeCnt_mat, 5)
+#head(ComplTypeCnt_mat, 5)
 #Create a wordcloud picture
 set.seed(1234)  #for reproducing the same result
-wordcloud(words = ComplTypeCnt_mat$word, freq = ComplTypeCnt_mat$cnt, random.order=TRUE,colors = brewer.pal(8,"Dark2"),scale=c(3.5,0.25)) #brewer.pal for R color palettes
+wordcloud(words = ComplTypeCnt_mat$word, freq = ComplTypeCnt_mat$cnt, random.order=TRUE,colors = brewer.pal(8,"Dark2"),scale=c(3.5,0.25)) #brewer.pal for R color palettes, scale for adjusting the pic
 ### Observations ###
-log_print("By looking at Complaint Type Count matrix, we can conclude that most number of complaints are added in the categories of internet,service,bill and data.")
+ComplTypeCnt_mat<-arrange(ComplTypeCnt_mat,desc(cnt))
+log_print(paste("By looking at Complaint Type Count matrix, we can conclude that most number of complaints are added in the categories of:",ComplTypeCnt_mat$word[1],ComplTypeCnt_mat$word[2],ComplTypeCnt_mat$word[3],ComplTypeCnt_mat$word[4],ComplTypeCnt_mat$word[5],ComplTypeCnt_mat$word[6],sep=","),hide_notes = TRUE)
+log_print("To get a better understanding, please look at the wordcloud picture.",hide_notes = TRUE)
 ### Observations ###
 
 # Q. Create a new categorical variable with value as Open and Closed. 
@@ -119,16 +125,37 @@ data <- data %>%
     (Status == 'Open' | Status == 'Pending') ~ "Open",
     (Status == 'Closed' | Status == 'Solved') ~ "Closed"
   ))
-
+data$State <- tolower(data$State)  #To avoid duplicates
 # Q. Provide state wise status of complaints in a stacked bar chart. 
+#plot data
+ggplot(data = data, aes(y = State)) + 
+  geom_bar(aes(fill = Status_2)) + 
+  ggtitle("State wise status of complaints ")
+
+# Q. Use the categorized variable from Q3. Provide insights on:
+#  - Which state has the maximum complaints
 # group by state and status
 data_grp_stateNStatus <- data %>% 
   group_by(State,Status_2) %>%
   summarize(cnt = n_distinct(Customer.Complaint))
-
-# Q. Use the categorized variable from Q3. Provide insights on:
-#  - Which state has the maximum complaints
+Statewise_status<-dcast(data_grp_stateNStatus, State ~ Status_2, value.var="cnt")
+Statewise_status$Total <- Statewise_status$Closed + Statewise_status$Open
+Statewise_status<-arrange(Statewise_status,desc(Total))
+log_print(paste(str_to_title(Statewise_status$State[1]), "state has maximum number of complaints.",sep = " "),hide_notes = TRUE)
 #  - Which state has the highest percentage of unresolved complaints
-#  - Provide the percentage of complaints resolved till date, which were received through theInternet and customer care calls.
+Statewise_status$UnresolvedPerc <- (Statewise_status$Open / Statewise_status$Total)*100
+Statewise_status_unres<-arrange(Statewise_status,desc(UnresolvedPerc))
+log_print(paste(str_to_title(Statewise_status_unres$State[1]),"has highest percentage of unresolved complaints.",sep = " "),hide_notes = TRUE)
+log_print("In this data set, Kansas has higher unresolved rate. However, it only got 1 Open complaint and 1 Unresolved.That is why it got 50% unresolved rate. So this result doesn't mean much. I am not entirely sure whether this is what we want.",hide_notes = TRUE)
+#  - Provide the percentage of complaints resolved till date, which were received through the Internet and customer care calls.
+data_grp_res <- data %>% 
+  group_by(Received.Via,Status_2) %>%
+  summarize(cnt = n_distinct(Customer.Complaint))
+data_grp_res$perc <-  (data_grp_res$cnt/nrow(data)) * 100
+data_resPerc_call <- filter(data_grp_res,Received.Via=="Customer Care Call" & Status_2=="Closed")
+log_print(paste("The resolved rate for Customer call is:",data_resPerc_call$perc[1],sep = ""),hide_notes = TRUE )
+data_resPerc_Internet <- filter(data_grp_res,Received.Via=="Internet" & Status_2=="Closed")
+log_print(paste("The resolved rate for Internet is:",data_resPerc_Internet$perc[1],sep = ""),hide_notes = TRUE )
+log_print("In this data set, both methods have similar resolved rate.", hide_notes = TRUE)
 # Close log
 log_close()
