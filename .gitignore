@@ -8,6 +8,7 @@ __pycache__/
 
 # added by Deepthi
 SL_R/log
+SL_Python/NYC311_complaintAnalysis/output
 
 # Distribution / packaging
 .Python
