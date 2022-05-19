@@ -25,7 +25,7 @@ lf <- log_open(tmp)
 log_print("Simlilearn - DS with R Pgming - Project 2")
 
 ### Q.Import data in to R
-data <- read.csv("../data/Comcast Telecom Complaints data.csv")
+data <- read.csv("./Comcast Telecom Complaints data.csv")
 
 ### To check missing values
 #apply(is.na(data),2, which)
