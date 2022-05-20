@@ -31,6 +31,13 @@ os.chdir(dn)  #set working directory as script directory
 # ##Import data into Python environment.
 data = pd.read_csv(dn + '/Comcast_telecom_complaints_data.csv')
 # print(data.head(5))
+
+###Create the directory if not exists
+try:
+    os.makedirs(dn + '/Output')
+except OSError:
+    if not os.path.isdir(dn + '/Output'):
+        raise
 # ##output files
 ComType_Count = dn + "/output/ComplaintType_Count.csv"
 
@@ -38,6 +45,7 @@ plot_data_monthly = dn + "/output/ComplaintCnt_Monthly.pdf"
 plot_data_daily = dn + "/output/ComplaintCnt_daily.pdf"
 plot_data_wordcloud = dn + "/output/Complaint_wordcloud.pdf"
 plot_ComType_cnt = dn + "/output/ComplaintType_Cnt.pdf"
+plot_State_Status = dn + "/output/ComplaintCnt_State_Status.pdf"
 
 ##date parsing for unicode dates
 def dateParsing1(dt):
@@ -139,7 +147,7 @@ plt.ylabel("Complaint Count")
 plt.savefig(plot_data_daily)
 
 data_Mnth_grp = data_Mnth_grp.sort_values(by='Count',ascending=False)
-f.write("%s has maximum number of complaints.\n" % data_Mnth_grp.iloc[0]['Date_ym'])
+f.write("\n%s has maximum number of complaints.\n" % data_Mnth_grp.iloc[0]['Date_ym'])
 
 # ##Provide a table with the frequency of complaint types.
 # ##Which complaint types are maximum i.e., around internet, network issues, or across any other domains.
@@ -175,6 +183,7 @@ plt.imshow(wordcloud)
 plt.axis("off")
 # plt.show()
 plt.savefig(plot_data_wordcloud)
+f.write("\nCreated wordcloud for Complaint Types.\n")
 
 #count of complaint types
 # Count Vectorizer
@@ -192,6 +201,9 @@ term_document_matrix.reset_index(inplace=True)
 term_document_matrix = term_document_matrix.sort_values(by ='total_count',ascending=False)
 tdm_TotCnt = term_document_matrix[['index','total_count']]
 tdm_TotCnt.to_csv(ComType_Count,sep=',',index=False,encoding='utf-8')
+f.write("\nTop 25 complaints are saved in to a file\n")
+f.write("Top 10 complaints are:\n")
+f.write((tdm_TotCnt.head(10).reset_index(drop=True)).to_string())
 
 #plot count
 # Top 25 words
@@ -206,5 +218,48 @@ plt.xticks(rotation=90)
 plt.title("Top 25 Complaint Types")
 # plt.show()
 plt.savefig(plot_ComType_cnt)
+f.write("\nTop 25 complaint type counts are plotted using a bar graph.\n")
+
+# ##Create a new categorical variable with value as Open and Closed. Open & Pending is to be categorized as Open and Closed & Solved is to be categorized as Closed.
+data['Status'] = data['Status'].str.lower()
+data['State'] = data['State'].str.lower()
+data['State'] = data['State'].str.title()
+data['Status_1'] = np.where((data['Status']== 'closed')|(data['Status']== 'solved'), 'Closed', 'Open')
+# print(data.Status_1.unique())
+
+# ##Provide state wise status of complaints in a stacked bar chart.
+data.groupby('State')['Status_1'] \
+    .value_counts() \
+    .unstack(level=1) \
+    .plot.bar(stacked=True)
+plt.ylabel("Complaint Count")
+plt.xlabel("State")
+plt.xticks(fontsize=5)
+plt.xticks(rotation=90)
+# plt.show()
+plt.savefig(plot_State_Status)
+f.write("\nStacked bar chart has created\n")
+
+# ##- Use the categorized variable from Q3. Provide insights on:
+# 	- Which state has the maximum complaints
+# 	- Which state has the highest percentage of unresolved complaints
+# 	- Provide the percentage of complaints resolved till date, which were received through the Internet and customer care calls.
+data_State_grp = data.groupby(['State'])['Customer_Complaint'].count().sort_values(ascending=False).reset_index(name='Count')
+f.write("\n%s state has maximum complaints.\n" % data_State_grp.iloc[0]['State'])
+
+data_StateStatus_grp = data.groupby(['State', 'Status_1']).size().unstack().fillna(0).reset_index()
+data_StateStatus_grp['Total'] = data_StateStatus_grp['Closed'] + data_StateStatus_grp['Open']
+data_StateStatus_grp['UnresolvedPerc'] = (data_StateStatus_grp['Open']/data_StateStatus_grp['Total'])*100
+data_StateStatus_grp['ResolvedPerc'] = (data_StateStatus_grp['Closed']/data_StateStatus_grp['Total'])*100
+data_StateStatus_grp = data_StateStatus_grp.sort_values('UnresolvedPerc',ascending=False)
+f.write("\n%s state has highest percentage of unresolved complaints.\n" % data_StateStatus_grp.iloc[0]['State'])
+f.write("However Kansas has only one open and one closed complaint. Hence this doesn't mean much. I am not sure whether this is the result that you are seeking.\n")
+
+data_RecievedStatus_grp = data.groupby(['Received_Via', 'Status_1']).size().unstack().fillna(0).reset_index()
+data_RecievedStatus_grp['Total'] = data_RecievedStatus_grp['Closed'] + data_RecievedStatus_grp['Open']
+data_RecievedStatus_grp['ResolvePerc'] = (data_RecievedStatus_grp['Closed']/len(data))*100
+data_RecievedStatus_grp = data_RecievedStatus_grp.sort_values('ResolvePerc',ascending=False)
+f.write("\nComplaint percentage which are resolved so far, received via Customer Care and Internet:\n")
+f.write(data_RecievedStatus_grp.to_string())
 
 f.close() #close log file
